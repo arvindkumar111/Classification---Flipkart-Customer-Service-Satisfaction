@@ -1,34 +1,97 @@
-1.Problem Statement
-In India's fiercely competitive e-commerce market, Flipkart competes with Amazon and Meesho by prioritizing superior customer service. This project tackles a critical business challenge: predicting Customer Satisfaction (CSAT) scores from support interactions to enable proactive service improvements. Using a dataset of 50K+ customer tickets spanning chat, phone, email channels, the classification task predicts binary/multiclass CSAT outcomes (High/Low or 1-5 scale) while identifying key drivers like first response time, agent performance, and channel effectiveness. Success metric: >88% classification accuracy to power real-time agent coaching and resource allocation, ultimately boosting retention by 15%+.
+# Flipkart Customer Service Satisfaction — Classification Project
 
-2.CRISP-DM Methodology
-Following the industry-standard CRISP-DM framework:
+## 📌 Project Summary
 
-Business Understanding: Defined CSAT prediction as classification problem targeting F1-score >0.88, with business ROI through reduced churn. Data Understanding: EDA revealed strong correlations (r=0.72) between first-response-time and CSAT; weekend shifts averaged 17% lower satisfaction; chat channel outperformed email by 12%. Class imbalance showed only 38% High-CSAT cases.
+In the highly competitive e-commerce space, delivering excellent customer service is crucial for sustaining growth and customer loyalty. Flipkart, as one of the largest e-commerce platforms, focuses on enhancing customer satisfaction to differentiate itself from competitors.
 
-Data Preparation (80% impact): Handled 12% missing values via median imputation, encoded 15 categorical features (agent_ID, channel_type), engineered 8 new features including response_delay_hrs, ticket_urgency_score, and feedback_sentiment. Applied SMOTE oversampling and feature selection retaining top 22 variables via XGBoost importances.
+This project analyzes ~22,430 customer service interactions across support channels to identify key drivers of Customer Satisfaction (CSAT), evaluate performance across service teams, and build a machine learning model to predict at-risk (dissatisfied) customers — enabling proactive intervention rather than reactive damage control.
 
-Modeling: Pipeline approach tested Logistic Regression baseline (68% accuracy) → Random Forest (82%) → XGBoost ensemble (89% F1). GridSearchCV optimized n_estimators=450, max_depth=7, learning_rate=0.07 across 5-fold stratified CV.
+## 🎯 Problem Statement
 
-Feature Importance: First_response_time (29%), agent_rating (23%), channel_type (19%), ticket_age (15%) dominated.
+- **Company:** Flipkart (major e-commerce platform)
+- **Objective:** Identify key drivers of CSAT, evaluate agent/team performance, and develop data-driven strategies to improve the support experience
+- **Expected Outcomes:** Faster issue resolution, tailored support strategies, optimized agent performance, improved CSAT, and increased customer retention
 
-3.Model Performance & Analysis Final Model: XGBoost classifier achieved 89.2% accuracy, 0.91 F1-score (+21% over baseline), 93% precision for High-CSAT prediction on temporal holdout (20% recent data). Confusion matrix showed primary errors in borderline cases (CSAT=3/5).
-Key Business Insights:
+## 📊 Dataset
 
-First response <90 minutes → +37% CSAT probability
+The dataset contains 22,430 customer service records with 20 original features, including:
 
-Chat channel: 91% satisfaction vs Email's 79%
+| Category | Columns |
+|---|---|
+| Interaction Info | `channel_name`, `category`, `Sub-category`, `Customer Remarks` |
+| Order Info | `Order_id`, `order_date_time`, `Product_category`, `Item_price` |
+| Timing | `Issue_reported at`, `issue_responded`, `Survey_response_Date` |
+| Agent Info | `Agent_name`, `Supervisor`, `Manager`, `Tenure Bucket`, `Agent Shift` |
+| Target | `CSAT Score` (1–5) |
 
-Top 10% agents drive 28% satisfaction premium
+## 🛠️ Tech Stack
 
-Weekend night shifts: -19% CSAT (staffing priority)
+- **Pandas / NumPy** — data manipulation and cleaning
+- **Matplotlib / Seaborn** — data visualization
+- **Scikit-learn** — model building, tuning, and evaluation
+- **TextBlob** — sentiment analysis on customer remarks
+- **SHAP** — model explainability
+- **SciPy** — statistical hypothesis testing
 
-SHAP analysis confirmed interaction effects: high-urgency tickets on phone channel had 2.4x failure risk. Model processes 250 predictions/second with 180ms latency, production-ready.
+## 🔍 Project Workflow
 
-4.Production Deployment & Monitoring Dockerized FastAPI microservice deployed on AWS ECS with auto-scaling. Real-time API accepts ticket features, returns CSAT prediction + intervention recommendations ("Escalate to chat", "Priority agent assignment"). Prometheus + Grafana monitors prediction drift, data skew, and SLA compliance. CI/CD via GitHub Actions ensures weekly retraining on fresh tickets. Integration hooks provided for Flipkart's agent dashboard and quality assurance systems.
+### 1. Data Cleaning & Wrangling
+- Dropped columns with extreme missingness (`connected_handling_time`, `order_date_time`, `Customer_City`, `Item_price`, `Product_category`) while preserving signal via a `has_order_info` flag
+- Dropped high-cardinality/redundant columns (`Agent_name`, `Manager`)
+- Removed duplicates (none found)
 
-5.Business Impact & Strategic Recommendations Immediate ROI: Model flags 27% of at-risk tickets for proactive intervention, potentially saving ₹4.7Cr annual churn cost (3% retention lift). Strategic wins include chat channel expansion (+7% CSAT), weekend day-shift staffing (+14% satisfaction), and first-response SLA <90min across all channels.
+### 2. Target Engineering
+- Reframed the original 1–5 `CSAT Score` (heavily imbalanced: 68.5% scored 5) into a **binary target**: `Satisfied` (CSAT 4–5) vs `Not Satisfied` (CSAT 1–3) → 81.2% / 18.8% split
 
-Key Learnings: 4 features drove 82% prediction power. CRISP-DM iteration between Data Prep and Modeling yielded +18% gain. Outperformed complex Deep Learning approaches while maintaining interpretability for business stakeholders.
+### 3. Feature Engineering
+- **Response time** (`response_time_min`) from timestamp differences — capped at the 99th percentile and log-transformed to handle heavy right-skew
+- **Text features** from `Customer Remarks`: sentiment scoring (TextBlob), missing-remark flag, and keyword flags for common complaint terms (refund, delay, worst, poor, rude, wrong, broken/damaged)
+- **Categorical encoding:** one-hot encoding for low-cardinality columns, frequency encoding for medium-cardinality columns (`Sub-category`, `Supervisor`) to avoid dimensionality issues and data leakage
 
-Technologies: Python 3.11, XGBoost 2.0, scikit-learn 1.5, pandas, FastAPI, Docker, SHAP,
+### 4. Exploratory Data Analysis
+Visualized relationships between satisfaction and: channel, category, response time, agent shift, tenure, supervisor performance, and remark sentiment — see notebook for full chart-by-chart insights.
+
+### 5. Hypothesis Testing
+Statistically validated 3 hypotheses using Welch's t-test and Chi-Square test:
+- Response time significantly differs between satisfied/dissatisfied customers
+- Satisfaction is significantly associated with support channel
+- Remark sentiment significantly differs between satisfied/dissatisfied customers
+
+### 6. Model Building
+Trained and hyperparameter-tuned three classification models with stratified 5-fold cross-validation and class-weight balancing:
+
+| Model | Accuracy | Precision | Recall | F1 | ROC-AUC |
+|---|---|---|---|---|---|
+| Logistic Regression | 71.2% | 0.903 | 0.729 | 0.807 | **0.759** |
+| Decision Tree | 76.5% | 0.860 | 0.854 | 0.857 | 0.601 |
+| Random Forest | **84.4%** | 0.856 | **0.975** | **0.912** | 0.740 |
+
+### 7. Model Selection
+**Logistic Regression was selected as the final model.** Although Random Forest scored higher on accuracy and F1, it only identified 23% of actually dissatisfied customers (recall). Since the business goal is proactively catching at-risk customers, Logistic Regression's higher recall (73%) and best ROC-AUC (0.759) — along with its interpretability — made it the better fit.
+
+### 8. Model Explainability
+Used Logistic Regression coefficients and **SHAP (LinearExplainer)** to confirm the top satisfaction drivers: response time, remark sentiment, and order-related context.
+
+## 💡 Key Insights
+
+- Customers are polarized — very few "neutral" ratings; dissatisfaction tends to be strong
+- **Response time** is a major lever: dissatisfied customers waited ~4x longer (20 min median) than satisfied ones (5 min)
+- **Email** is the weakest-performing channel (70.5% satisfaction vs ~81.5% for Inbound/Outcall)
+- **Order Related** and **Cancellation** categories have the lowest satisfaction — core transactional friction points
+- Newer agents (On Job Training) and certain supervisors show notably lower satisfaction rates, pointing to training/coaching opportunities
+- Only 33% of customers leave written feedback, so relying on remarks alone misses many "silently dissatisfied" customers
+
+## ✅ Conclusion
+
+The analysis gives Flipkart concrete, actionable levers to improve CSAT: enforcing faster response-time SLAs (especially for Email and Order/Cancellation issues), targeted coaching for underperforming supervisors and newer agents, and using remark sentiment as a real-time flag for at-risk customers. The final Logistic Regression model supports proactive identification of dissatisfied customers, directly aligning with Flipkart's goal of improving retention and brand loyalty.
+
+## 🚀 How to Run
+
+```bash
+git clone <your-repo-link>
+cd <repo-folder>
+pip install -r requirements.txt
+jupyter notebook Flipkart_Customer_Satisfaction.ipynb
+```
+
+**Requirements:** pandas, numpy, matplotlib, seaborn, scikit-learn, textblob, shap, scipy
